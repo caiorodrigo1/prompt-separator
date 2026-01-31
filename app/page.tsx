@@ -10,6 +10,7 @@ interface SeparatedPrompts {
 export default function Home() {
   const [inputText, setInputText] = useState('')
   const [result, setResult] = useState<SeparatedPrompts | null>(null)
+  const [copiedSection, setCopiedSection] = useState<string | null>(null)
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -48,8 +49,28 @@ export default function Home() {
     setResult({ withCharacters, withoutCharacters })
   }
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
+  const copyToClipboard = async (text: string, section: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedSection(section)
+      setTimeout(() => setCopiedSection(null), 2000)
+    } catch (err) {
+      // Fallback para navegadores que não suportam clipboard API
+      const textArea = document.createElement('textarea')
+      textArea.value = text
+      textArea.style.position = 'fixed'
+      textArea.style.left = '-999999px'
+      document.body.appendChild(textArea)
+      textArea.select()
+      try {
+        document.execCommand('copy')
+        setCopiedSection(section)
+        setTimeout(() => setCopiedSection(null), 2000)
+      } catch (e) {
+        console.error('Falha ao copiar:', e)
+      }
+      document.body.removeChild(textArea)
+    }
   }
 
   return (
@@ -104,10 +125,14 @@ export default function Home() {
                 Sem Personagens ({result.withoutCharacters.length})
               </h2>
               <button
-                onClick={() => copyToClipboard(result.withoutCharacters.join('\n\n'))}
-                className="text-sm px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                onClick={() => copyToClipboard(result.withoutCharacters.join('\n\n'), 'without')}
+                className={`text-sm px-3 py-1 rounded transition-colors ${
+                  copiedSection === 'without'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-gray-700 hover:bg-gray-600'
+                }`}
               >
-                Copiar
+                {copiedSection === 'without' ? 'Copiado!' : 'Copiar'}
               </button>
             </div>
             <div className="space-y-4 max-h-[600px] overflow-y-auto">
@@ -133,10 +158,14 @@ export default function Home() {
                 Com Personagens ({result.withCharacters.length})
               </h2>
               <button
-                onClick={() => copyToClipboard(result.withCharacters.join('\n\n'))}
-                className="text-sm px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                onClick={() => copyToClipboard(result.withCharacters.join('\n\n'), 'with')}
+                className={`text-sm px-3 py-1 rounded transition-colors ${
+                  copiedSection === 'with'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-gray-700 hover:bg-gray-600'
+                }`}
               >
-                Copiar
+                {copiedSection === 'with' ? 'Copiado!' : 'Copiar'}
               </button>
             </div>
             <div className="space-y-4 max-h-[600px] overflow-y-auto">
