@@ -15,66 +15,6 @@ function formatTime(seconds: number): string {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
 }
 
-function generateDottiBlocksFromText(text: string, durationSeconds: number, audioFileName: string): string {
-  const blockDuration = 8
-  const sentences = text
-    .split(/(?<=[.!?])\s+/)
-    .map(s => s.trim())
-    .filter(s => s.length > 0)
-
-  if (sentences.length === 0) return ''
-
-  const totalWords = text.split(/\s+/).filter(w => w.length > 0).length
-  const wordsPerSecond = totalWords / durationSeconds
-  const wordsPerBlock = Math.max(1, Math.round(wordsPerSecond * blockDuration))
-
-  const blocks: string[][] = []
-  let currentBlock: string[] = []
-  let currentWordCount = 0
-
-  for (const sentence of sentences) {
-    const sentenceWords = sentence.split(/\s+/).filter(w => w.length > 0).length
-    currentBlock.push(sentence)
-    currentWordCount += sentenceWords
-
-    if (currentWordCount >= wordsPerBlock) {
-      blocks.push([...currentBlock])
-      currentBlock = []
-      currentWordCount = 0
-    }
-  }
-
-  // Push remaining sentences as the last block
-  if (currentBlock.length > 0 && (blocks.length === 0 || currentBlock.join(' ') !== blocks[blocks.length - 1].join(' '))) {
-    blocks.push(currentBlock)
-  }
-
-  const totalBlocks = blocks.length
-  const separator = '------------------------------------------------------------'
-
-  const header = [
-    '============================================================',
-    'SINCRONIZACAO DOTTI SYNC - BLOCOS DE 8 SEGUNDOS',
-    '============================================================',
-    `Arquivo: ${audioFileName}`,
-    `Duracao: ${formatTime(durationSeconds)}`,
-    `Total de prompts: ${totalBlocks}`,
-    '============================================================',
-    '',
-  ].join('\n')
-
-  const body = blocks
-    .map((block, i) => {
-      const startTime = Math.min(i * blockDuration, Math.floor(durationSeconds))
-      const endTime = Math.min((i + 1) * blockDuration, Math.ceil(durationSeconds))
-      const promptNumber = String(i + 1).padStart(3, '0')
-      return `PROMPT ${promptNumber} | ${formatTime(startTime)} - ${formatTime(endTime)}\n${block.join(' ')}\n${separator}`
-    })
-    .join('\n\n')
-
-  return header + '\n' + body
-}
-
 interface WhisperSegment {
   start: number
   end: number
@@ -147,14 +87,11 @@ export default function Home() {
   // Dotti Sync state
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [audioDuration, setAudioDuration] = useState<number | null>(null)
-  const [transcriptText, setTranscriptText] = useState('')
   const [dottiResult, setDottiResult] = useState('')
   const [dottiCopied, setDottiCopied] = useState(false)
   const [audioError, setAudioError] = useState('')
   const [isTranscribing, setIsTranscribing] = useState(false)
-  const [whisperSegments, setWhisperSegments] = useState<WhisperSegment[] | null>(null)
   const [draggingAudio, setDraggingAudio] = useState(false)
-  const [draggingTranscript, setDraggingTranscript] = useState(false)
   const audioUrlRef = useRef<string | null>(null)
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -219,7 +156,6 @@ export default function Home() {
     setAudioFile(file)
     setAudioDuration(null)
     setDottiResult('')
-    setWhisperSegments(null)
 
     if (audioUrlRef.current) {
       URL.revokeObjectURL(audioUrlRef.current)
@@ -252,28 +188,6 @@ export default function Home() {
     setDraggingAudio(false)
     const file = e.dataTransfer.files[0]
     if (file) processAudioFile(file)
-  }
-
-  const processTranscriptFile = (file: File) => {
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const text = event.target?.result as string
-      setTranscriptText(text)
-      setWhisperSegments(null)
-    }
-    reader.readAsText(file)
-  }
-
-  const handleTranscriptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) processTranscriptFile(file)
-  }
-
-  const handleTranscriptDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDraggingTranscript(false)
-    const file = e.dataTransfer.files[0]
-    if (file) processTranscriptFile(file)
   }
 
   const transcribeAudio = async () => {
@@ -311,29 +225,20 @@ export default function Home() {
       }
 
       const data = await res.json()
-      setTranscriptText(data.text || '')
-      if (data.segments && Array.isArray(data.segments)) {
-        setWhisperSegments(
-          data.segments.map((seg: { start: number; end: number; text: string }) => ({
+      if (data.segments && Array.isArray(data.segments) && audioDuration) {
+        const segments: WhisperSegment[] = data.segments.map(
+          (seg: { start: number; end: number; text: string }) => ({
             start: seg.start,
             end: seg.end,
             text: seg.text,
-          }))
+          })
         )
+        setDottiResult(generateDottiBlocks(segments, audioDuration, audioFile.name))
       }
     } catch {
       setAudioError('Erro ao conectar com o servico de transcricao.')
     } finally {
       setIsTranscribing(false)
-    }
-  }
-
-  const generateBlocks = () => {
-    if (!audioFile || !audioDuration) return
-    if (whisperSegments) {
-      setDottiResult(generateDottiBlocks(whisperSegments, audioDuration, audioFile.name))
-    } else if (transcriptText.trim()) {
-      setDottiResult(generateDottiBlocksFromText(transcriptText, audioDuration, audioFile.name))
     }
   }
 
@@ -512,7 +417,7 @@ export default function Home() {
       {activeTab === 'dotti-sync' && (
         <>
           <p className="text-gray-400 text-center mb-8">
-            Gera blocos de 8 segundos sincronizados a partir de um audio e texto transcrito
+            Transcreve o audio e gera blocos de 8 segundos sincronizados automaticamente
           </p>
 
           {/* Audio upload */}
@@ -559,11 +464,11 @@ export default function Home() {
           <div className="mb-6">
             <button
               onClick={transcribeAudio}
-              disabled={!audioFile || isTranscribing}
+              disabled={!audioFile || !audioDuration || isTranscribing}
               className="w-full py-3 px-6 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700
                 disabled:cursor-not-allowed rounded-lg font-semibold transition-colors"
             >
-              {isTranscribing ? 'Transcrevendo com Whisper...' : 'Transcrever com Whisper'}
+              {isTranscribing ? 'Transcrevendo e gerando blocos...' : 'Transcrever e Gerar Blocos'}
             </button>
             {isTranscribing && (
               <p className="text-purple-400 text-sm mt-2 text-center animate-pulse">
@@ -571,49 +476,6 @@ export default function Home() {
               </p>
             )}
           </div>
-
-          {/* Transcript input (manual fallback) */}
-          <div className="mb-6">
-            <label className="block mb-2 text-sm font-medium text-gray-400">
-              Ou upload/cole o texto transcrito manualmente:
-            </label>
-            <div
-              onDragOver={(e) => { e.preventDefault(); setDraggingTranscript(true) }}
-              onDragLeave={() => setDraggingTranscript(false)}
-              onDrop={handleTranscriptDrop}
-              className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors mb-4 ${
-                draggingTranscript
-                  ? 'border-blue-500 bg-blue-500/10'
-                  : 'border-gray-700 hover:border-gray-500'
-              }`}
-            >
-              <input
-                type="file"
-                accept=".txt"
-                onChange={handleTranscriptUpload}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              <p className="text-gray-500 text-sm">
-                Arraste um arquivo .txt aqui ou clique para selecionar
-              </p>
-            </div>
-            <textarea
-              value={transcriptText}
-              onChange={(e) => { setTranscriptText(e.target.value); setWhisperSegments(null) }}
-              placeholder="O texto transcrito aparecera aqui apos a transcricao, ou cole manualmente..."
-              className="w-full h-48 p-4 bg-gray-900 border border-gray-700 rounded-lg
-                text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500"
-            />
-          </div>
-
-          <button
-            onClick={generateBlocks}
-            disabled={!audioFile || audioDuration === null || (!whisperSegments && !transcriptText.trim())}
-            className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700
-              disabled:cursor-not-allowed rounded-lg font-semibold transition-colors mb-8"
-          >
-            Gerar Blocos
-          </button>
 
           {dottiResult && (
             <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
