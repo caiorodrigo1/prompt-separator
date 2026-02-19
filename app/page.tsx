@@ -92,6 +92,7 @@ export default function Home() {
   const [dottiResult, setDottiResult] = useState('')
   const [dottiCopied, setDottiCopied] = useState(false)
   const [audioError, setAudioError] = useState('')
+  const [isTranscribing, setIsTranscribing] = useState(false)
   const audioUrlRef = useRef<string | null>(null)
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -191,6 +192,31 @@ export default function Home() {
         setTranscriptText(text)
       }
       reader.readAsText(file)
+    }
+  }
+
+  const transcribeAudio = async () => {
+    if (!audioFile) return
+    setIsTranscribing(true)
+    setAudioError('')
+
+    try {
+      const formData = new FormData()
+      formData.append('audio', audioFile)
+
+      const res = await fetch('/api/transcribe', { method: 'POST', body: formData })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setAudioError(data.error || 'Erro na transcricao.')
+        return
+      }
+
+      setTranscriptText(data.text)
+    } catch {
+      setAudioError('Erro ao conectar com o servidor de transcricao.')
+    } finally {
+      setIsTranscribing(false)
     }
   }
 
@@ -408,10 +434,27 @@ export default function Home() {
             )}
           </div>
 
-          {/* Transcript input */}
+          {/* Whisper transcription */}
           <div className="mb-6">
-            <label className="block mb-2 text-sm font-medium">
-              Upload do texto transcrito (.txt) ou cole abaixo:
+            <button
+              onClick={transcribeAudio}
+              disabled={!audioFile || isTranscribing}
+              className="w-full py-3 px-6 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700
+                disabled:cursor-not-allowed rounded-lg font-semibold transition-colors"
+            >
+              {isTranscribing ? 'Transcrevendo com Whisper...' : 'Transcrever com Whisper'}
+            </button>
+            {isTranscribing && (
+              <p className="text-purple-400 text-sm mt-2 text-center animate-pulse">
+                Enviando audio para o Whisper API... isso pode levar alguns minutos.
+              </p>
+            )}
+          </div>
+
+          {/* Transcript input (manual fallback) */}
+          <div className="mb-6">
+            <label className="block mb-2 text-sm font-medium text-gray-400">
+              Ou upload/cole o texto transcrito manualmente:
             </label>
             <input
               type="file"
@@ -421,14 +464,14 @@ export default function Home() {
                 file:mr-4 file:py-2 file:px-4
                 file:rounded file:border-0
                 file:text-sm file:font-semibold
-                file:bg-blue-600 file:text-white
-                hover:file:bg-blue-700
+                file:bg-gray-700 file:text-gray-300
+                hover:file:bg-gray-600
                 cursor-pointer"
             />
             <textarea
               value={transcriptText}
               onChange={(e) => setTranscriptText(e.target.value)}
-              placeholder="Cole o texto transcrito aqui..."
+              placeholder="O texto transcrito aparecera aqui apos a transcricao, ou cole manualmente..."
               className="w-full h-48 p-4 bg-gray-900 border border-gray-700 rounded-lg
                 text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500"
             />
