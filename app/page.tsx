@@ -201,20 +201,37 @@ export default function Home() {
     setAudioError('')
 
     try {
-      const formData = new FormData()
-      formData.append('audio', audioFile)
-
-      const res = await fetch('/api/transcribe', { method: 'POST', body: formData })
-      const data = await res.json()
-
-      if (!res.ok) {
-        setAudioError(data.error || 'Erro na transcricao.')
+      // Get API key from server
+      const keyRes = await fetch('/api/transcribe')
+      const keyData = await keyRes.json()
+      if (!keyRes.ok) {
+        setAudioError(keyData.error || 'Erro ao obter chave da API.')
         return
       }
 
-      setTranscriptText(data.text)
+      // Send audio directly to Groq (bypasses Vercel body size limit)
+      const formData = new FormData()
+      formData.append('file', audioFile)
+      formData.append('model', 'whisper-large-v3-turbo')
+      formData.append('language', 'pt')
+      formData.append('response_format', 'text')
+
+      const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${keyData.key}` },
+        body: formData,
+      })
+
+      if (!res.ok) {
+        const err = await res.text()
+        setAudioError(`Erro na transcricao: ${err}`)
+        return
+      }
+
+      const text = await res.text()
+      setTranscriptText(text)
     } catch {
-      setAudioError('Erro ao conectar com o servidor de transcricao.')
+      setAudioError('Erro ao conectar com o servico de transcricao.')
     } finally {
       setIsTranscribing(false)
     }
