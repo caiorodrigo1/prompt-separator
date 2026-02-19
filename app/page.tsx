@@ -39,9 +39,7 @@ function generateDottiBlocksFromText(text: string, durationSeconds: number, audi
 
     if (currentWordCount >= wordsPerBlock) {
       blocks.push([...currentBlock])
-      // Overlap: last sentence of this block starts the next block
-      // Don't count overlap words toward the new block's budget
-      currentBlock = [currentBlock[currentBlock.length - 1]]
+      currentBlock = []
       currentWordCount = 0
     }
   }
@@ -101,14 +99,6 @@ function generateDottiBlocks(
     const blockSegments = segments.filter(
       (seg) => seg.start >= windowStart && seg.start < windowEnd
     )
-
-    // Overlap: prepend the last segment from the previous block
-    if (i > 0 && blocks[i - 1] && blocks[i - 1].length > 0) {
-      const lastPrev = blocks[i - 1][blocks[i - 1].length - 1]
-      if (blockSegments.length === 0 || blockSegments[0] !== lastPrev) {
-        blockSegments.unshift(lastPrev)
-      }
-    }
 
     blocks.push(blockSegments)
   }
