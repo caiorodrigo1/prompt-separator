@@ -163,6 +163,8 @@ export default function Home() {
   const [audioError, setAudioError] = useState('')
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [whisperSegments, setWhisperSegments] = useState<WhisperSegment[] | null>(null)
+  const [draggingAudio, setDraggingAudio] = useState(false)
+  const [draggingTranscript, setDraggingTranscript] = useState(false)
   const audioUrlRef = useRef<string | null>(null)
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -222,17 +224,13 @@ export default function Home() {
     }
   }
 
-  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  const processAudioFile = (file: File) => {
     setAudioError('')
     setAudioFile(file)
     setAudioDuration(null)
     setDottiResult('')
     setWhisperSegments(null)
 
-    // Revoke previous URL
     if (audioUrlRef.current) {
       URL.revokeObjectURL(audioUrlRef.current)
     }
@@ -254,17 +252,38 @@ export default function Home() {
     audio.src = url
   }
 
+  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) processAudioFile(file)
+  }
+
+  const handleAudioDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDraggingAudio(false)
+    const file = e.dataTransfer.files[0]
+    if (file) processAudioFile(file)
+  }
+
+  const processTranscriptFile = (file: File) => {
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const text = event.target?.result as string
+      setTranscriptText(text)
+      setWhisperSegments(null)
+    }
+    reader.readAsText(file)
+  }
+
   const handleTranscriptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        const text = event.target?.result as string
-        setTranscriptText(text)
-        setWhisperSegments(null)
-      }
-      reader.readAsText(file)
-    }
+    if (file) processTranscriptFile(file)
+  }
+
+  const handleTranscriptDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDraggingTranscript(false)
+    const file = e.dataTransfer.files[0]
+    if (file) processTranscriptFile(file)
   }
 
   const transcribeAudio = async () => {
@@ -511,26 +530,36 @@ export default function Home() {
             <label className="block mb-2 text-sm font-medium">
               Upload do arquivo de audio:
             </label>
-            <input
-              type="file"
-              accept=".mp3,.wav,.m4a,.ogg,.aac,.webm"
-              onChange={handleAudioUpload}
-              className="block w-full text-sm text-gray-400 mb-2
-                file:mr-4 file:py-2 file:px-4
-                file:rounded file:border-0
-                file:text-sm file:font-semibold
-                file:bg-blue-600 file:text-white
-                hover:file:bg-blue-700
-                cursor-pointer"
-            />
-            {audioFile && (
-              <div className="text-sm text-gray-400 mt-2 space-y-1">
-                <p>Arquivo: <span className="text-gray-200">{audioFile.name}</span></p>
-                {audioDuration !== null && (
-                  <p>Duracao: <span className="text-gray-200">{formatTime(audioDuration)}</span></p>
-                )}
-              </div>
-            )}
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDraggingAudio(true) }}
+              onDragLeave={() => setDraggingAudio(false)}
+              onDrop={handleAudioDrop}
+              className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                draggingAudio
+                  ? 'border-blue-500 bg-blue-500/10'
+                  : 'border-gray-700 hover:border-gray-500'
+              }`}
+            >
+              <input
+                type="file"
+                accept=".mp3,.wav,.m4a,.ogg,.aac,.webm"
+                onChange={handleAudioUpload}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+              {audioFile ? (
+                <div className="text-sm text-gray-400 space-y-1">
+                  <p>Arquivo: <span className="text-gray-200">{audioFile.name}</span></p>
+                  {audioDuration !== null && (
+                    <p>Duracao: <span className="text-gray-200">{formatTime(audioDuration)}</span></p>
+                  )}
+                  <p className="text-gray-500 text-xs mt-2">Arraste outro arquivo para substituir</p>
+                </div>
+              ) : (
+                <p className="text-gray-500 text-sm">
+                  Arraste o arquivo de audio aqui ou clique para selecionar
+                </p>
+              )}
+            </div>
             {audioError && (
               <p className="text-red-400 text-sm mt-2">{audioError}</p>
             )}
@@ -558,18 +587,26 @@ export default function Home() {
             <label className="block mb-2 text-sm font-medium text-gray-400">
               Ou upload/cole o texto transcrito manualmente:
             </label>
-            <input
-              type="file"
-              accept=".txt"
-              onChange={handleTranscriptUpload}
-              className="block w-full text-sm text-gray-400 mb-4
-                file:mr-4 file:py-2 file:px-4
-                file:rounded file:border-0
-                file:text-sm file:font-semibold
-                file:bg-gray-700 file:text-gray-300
-                hover:file:bg-gray-600
-                cursor-pointer"
-            />
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDraggingTranscript(true) }}
+              onDragLeave={() => setDraggingTranscript(false)}
+              onDrop={handleTranscriptDrop}
+              className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors mb-4 ${
+                draggingTranscript
+                  ? 'border-blue-500 bg-blue-500/10'
+                  : 'border-gray-700 hover:border-gray-500'
+              }`}
+            >
+              <input
+                type="file"
+                accept=".txt"
+                onChange={handleTranscriptUpload}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+              <p className="text-gray-500 text-sm">
+                Arraste um arquivo .txt aqui ou clique para selecionar
+              </p>
+            </div>
             <textarea
               value={transcriptText}
               onChange={(e) => { setTranscriptText(e.target.value); setWhisperSegments(null) }}
