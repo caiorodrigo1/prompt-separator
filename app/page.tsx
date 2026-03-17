@@ -142,7 +142,6 @@ export default function Home() {
       const formData = new FormData()
       formData.append('file', audioFile)
       formData.append('model', 'whisper-large-v3')
-      formData.append('language', 'en')
       formData.append('response_format', 'verbose_json')
       formData.append('timestamp_granularities[]', 'segment')
 

@@ -36,7 +36,6 @@ export async function POST(request: Request) {
   const groqFormData = new FormData()
   groqFormData.append('file', file, fileName)
   groqFormData.append('model', 'whisper-large-v3')
-  groqFormData.append('language', 'en')
   groqFormData.append('response_format', 'verbose_json')
   groqFormData.append('timestamp_granularities[]', 'segment')
 
