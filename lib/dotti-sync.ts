@@ -32,6 +32,14 @@ export function generateDottiBlocks(
     blocks.push(blockSegments)
   }
 
+  // Fill empty blocks by moving the last segment from the previous block.
+  // Reverse iteration keeps segments closer to their original timestamp.
+  for (let i = blocks.length - 1; i >= 1; i--) {
+    if (blocks[i].length === 0 && blocks[i - 1].length > 0) {
+      blocks[i].push(blocks[i - 1].pop()!)
+    }
+  }
+
   // Remove trailing empty blocks
   while (blocks.length > 0 && blocks[blocks.length - 1].length === 0) {
     blocks.pop()
